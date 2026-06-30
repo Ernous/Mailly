@@ -17,16 +17,61 @@ const sortBy = ref('date')
 const sortAsc = ref(false)
 const quota = ref<QuotaInfo>({ used: 0, total: 0 })
 
+// ── Persistence ───────────────────────────────────────────────────────────
+const STORAGE_KEY_ACCOUNT = 'last-account-id'
+const STORAGE_KEY_FOLDER  = 'last-folder'
+
+function saveLastSession(accId: string, folder: string) {
+  localStorage.setItem(STORAGE_KEY_ACCOUNT, accId)
+  localStorage.setItem(STORAGE_KEY_FOLDER, folder)
+}
+
+function loadLastSession(): { accountId: string | null; folder: string } {
+  return {
+    accountId: localStorage.getItem(STORAGE_KEY_ACCOUNT),
+    folder: localStorage.getItem(STORAGE_KEY_FOLDER) || 'INBOX',
+  }
+}
+// Key: `${accountId}:${folder}:${uid}`
+const messageCache = new Map<string, FullMessage>()
+const MAX_CACHE = 100
+
+function cacheKey(accId: string, folder: string, uid: number) {
+  return `${accId}:${folder}:${uid}`
+}
+
+function cacheGet(accId: string, folder: string, uid: number) {
+  return messageCache.get(cacheKey(accId, folder, uid)) ?? null
+}
+
+function cacheSet(accId: string, folder: string, uid: number, msg: FullMessage) {
+  const key = cacheKey(accId, folder, uid)
+  if (messageCache.size >= MAX_CACHE) {
+    // evict oldest entry
+    messageCache.delete(messageCache.keys().next().value)
+  }
+  messageCache.set(key, msg)
+}
+
 export function useMailStore() {
   const selectedAccount = computed(() =>
     accounts.value.find(a => a.id === selectedAccountId.value) || null
   )
 
+  // The display name for the selected folder (strips [Gmail]/ prefix etc.)
+  const selectedFolderDisplayName = computed(() => {
+    const f = folders.value.find(f => f.full_name === selectedFolderName.value)
+    return f ? f.name : selectedFolderName.value
+  })
+
   async function loadAccounts() {
     try {
       accounts.value = await api.getAccounts()
       if (accounts.value.length > 0 && !selectedAccountId.value) {
-        selectedAccountId.value = accounts.value[0].id
+        // Restore last used account, fallback to first
+        const { accountId } = loadLastSession()
+        const restored = accountId && accounts.value.find(a => a.id === accountId)
+        selectedAccountId.value = restored ? restored.id : accounts.value[0].id
       }
     } catch {
       accounts.value = []
@@ -39,6 +84,7 @@ export function useMailStore() {
     selectedMessage.value = null
     messages.value = []
     selectedMessages.value.clear()
+    saveLastSession(acc.id, 'INBOX')
     await loadFolders(acc)
     await loadMessages(acc, 'INBOX')
     await loadQuota(acc)
@@ -72,6 +118,8 @@ export function useMailStore() {
     selectedMessages.value.clear()
     messagesLoading.value = true
     error.value = ''
+    // Persist last session
+    saveLastSession(acc.id, folder)
     try {
       const res = await api.getMessages(acc, folder, 100)
       messages.value = res.messages || []
@@ -82,9 +130,75 @@ export function useMailStore() {
     }
   }
 
+  // Prefetch a message into cache without showing it
+  function prefetchMessage(acc: Account, uid: number) {
+    const folder = selectedFolderName.value
+    if (cacheGet(acc.id, folder, uid)) return   // already cached
+    api.getMessage(acc, folder, uid)
+      .then(msg => cacheSet(acc.id, folder, uid, msg))
+      .catch(() => {})   // silent — it's just a hint
+  }
+
   async function openMessage(acc: Account, uid: number) {
     try {
-      selectedMessage.value = await api.getMessage(acc, selectedFolderName.value, uid)
+      const folder = selectedFolderName.value
+      const cached = cacheGet(acc.id, folder, uid)
+
+      if (cached) {
+        // Show instantly from cache
+        selectedMessage.value = cached
+
+        // If unread — mark read in background, update cache + list
+        if (!cached.is_read) {
+          api.markRead(acc, folder, uid).then(() => {
+            const updated = { ...cached, is_read: true }
+            cacheSet(acc.id, folder, uid, updated)
+            selectedMessage.value = updated
+            const idx = messages.value.findIndex(m => m.uid === uid)
+            if (idx !== -1) messages.value[idx] = { ...messages.value[idx], is_read: true }
+          })
+        }
+        return
+      }
+
+      // Not cached — fetch, but show loading state only if no previous message visible
+      const msg = await api.getMessage(acc, folder, uid)
+      cacheSet(acc.id, folder, uid, msg)
+      selectedMessage.value = msg
+
+      if (!msg.is_read) {
+        api.markRead(acc, folder, uid).then(() => {
+          const updated = { ...msg, is_read: true }
+          cacheSet(acc.id, folder, uid, updated)
+          if (selectedMessage.value?.uid === uid) selectedMessage.value = updated
+          const idx = messages.value.findIndex(m => m.uid === uid)
+          if (idx !== -1) messages.value[idx] = { ...messages.value[idx], is_read: true }
+        })
+      }
+    } catch (e: any) {
+      error.value = e.message
+    }
+  }
+
+  async function markMessageUnread(acc: Account, uid: number) {
+    try {
+      await api.markUnread(acc, selectedFolderName.value, uid)
+      const idx = messages.value.findIndex(m => m.uid === uid)
+      if (idx !== -1) {
+        messages.value[idx] = { ...messages.value[idx], is_read: false }
+      }
+    } catch (e: any) {
+      error.value = e.message
+    }
+  }
+
+  async function deleteMessage(acc: Account, uid: number) {
+    try {
+      await api.deleteMessage(acc, selectedFolderName.value, uid)
+      messages.value = messages.value.filter(m => m.uid !== uid)
+      if (selectedMessage.value?.uid === uid) {
+        selectedMessage.value = null
+      }
     } catch (e: any) {
       error.value = e.message
     }
@@ -127,6 +241,7 @@ export function useMailStore() {
     selectedAccount,
     selectedAccountId,
     selectedFolderName,
+    selectedFolderDisplayName,
     messages,
     selectedMessage,
     folders,
@@ -146,9 +261,13 @@ export function useMailStore() {
     loadMessages,
     openMessage,
     closeMessage,
+    prefetchMessage,
+    markMessageUnread,
+    deleteMessage,
     toggleMessageSelect,
     selectAllMessages,
     clearSelection,
     loadQuota,
+    loadLastSession,
   }
 }

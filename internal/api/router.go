@@ -21,6 +21,7 @@ func NewRouter(storage store.Storage, stateStore *oauth.StateStore) http.Handler
 	// OAuth
 	mux.HandleFunc("GET /api/providers", accountHandler.Providers)
 	mux.HandleFunc("POST /api/accounts/connect", accountHandler.Connect)
+	mux.HandleFunc("POST /api/accounts/custom", accountHandler.ConnectCustom)
 	mux.HandleFunc("GET /api/accounts/callback", accountHandler.Callback)
 	mux.HandleFunc("GET /api/accounts", accountHandler.List)
 	mux.HandleFunc("DELETE /api/accounts/{id}", accountHandler.Delete)
@@ -29,6 +30,9 @@ func NewRouter(storage store.Storage, stateStore *oauth.StateStore) http.Handler
 	mux.HandleFunc("GET /api/folders", messageHandler.ListFolders)
 	mux.HandleFunc("GET /api/messages", messageHandler.ListByFolder)
 	mux.HandleFunc("GET /api/message", messageHandler.GetByID)
+	mux.HandleFunc("POST /api/message/mark-read", messageHandler.MarkRead)
+	mux.HandleFunc("POST /api/message/mark-unread", messageHandler.MarkUnread)
+	mux.HandleFunc("DELETE /api/message", messageHandler.DeleteMessage)
 
 	// Quota
 	mux.HandleFunc("GET /api/quota", accountHandler.Quota)

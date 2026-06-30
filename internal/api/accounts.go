@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/emersion/go-imap"
+	imapclient "github.com/emersion/go-imap/client"
 	"github.com/emersion/go-imap/responses"
 	"github.com/ernela/mailly/internal/models"
 	"github.com/ernela/mailly/internal/oauth"
@@ -186,13 +187,102 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 <script>
 try {
   if (window.opener) {
-    window.opener.postMessage({type: "mailly:connected", email: %q, provider: %q}, "*");
+    window.opener.postMessage({type: "mailly:connected", account_id: %q, email: %q, provider: %q}, "*");
   }
 } catch(e) {}
 setTimeout(function() { window.close(); }, 500);
 </script>
 <h2>Connected: %s</h2><p>This window will close automatically.</p>
-</body></html>`, userInfo.Email, entry.Provider, userInfo.Email)
+</body></html>`, account.ID.String(), userInfo.Email, entry.Provider, userInfo.Email)
+}
+
+func (h *AccountHandler) ConnectCustom(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		IMAPHost string `json:"imap_host"`
+		IMAPPort int    `json:"imap_port"`
+		SMTPHost string `json:"smtp_host"`
+		SMTPPort int    `json:"smtp_port"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+
+	if req.Email == "" || req.Password == "" || req.IMAPHost == "" || req.IMAPPort == 0 {
+		jsonError(w, "missing required fields", http.StatusBadRequest)
+		return
+	}
+
+	// Test connection
+	addr := fmt.Sprintf("%s:%d", req.IMAPHost, req.IMAPPort)
+	c, err := imapclient.DialTLS(addr, nil)
+	if err != nil {
+		jsonError(w, "failed to connect to IMAP server: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := c.Login(req.Email, req.Password); err != nil {
+		c.Close()
+		jsonError(w, "invalid credentials: "+err.Error(), http.StatusUnauthorized)
+		return
+	}
+	c.Logout()
+
+	// Get or create user
+	var userID uuid.UUID
+	var sessionID string
+
+	if cookie, err := r.Cookie("mailly_session"); err == nil {
+		if sess, err := h.storage.GetSession(r.Context(), cookie.Value); err == nil {
+			userID = sess.UserID
+			sessionID = cookie.Value
+		}
+	}
+
+	if userID == uuid.Nil {
+		user, err := h.storage.GetOrCreateUser(r.Context(), req.Email)
+		if err != nil {
+			jsonError(w, "failed to create user", http.StatusInternalServerError)
+			return
+		}
+		userID = user.ID
+
+		sessionID, err = h.storage.CreateSession(r.Context(), userID)
+		if err != nil {
+			jsonError(w, "failed to create session", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	account := &models.Account{
+		ID:          uuid.New(),
+		UserID:      userID,
+		Email:       req.Email,
+		DisplayName: req.Email,
+		Provider:    "custom",
+		IMAPHost:    req.IMAPHost,
+		IMAPPort:    req.IMAPPort,
+		SMTPHost:    req.SMTPHost,
+		SMTPPort:    req.SMTPPort,
+		AccessToken: req.Password, // Store password here for custom provider
+	}
+
+	if err := h.storage.CreateAccount(r.Context(), account); err != nil {
+		jsonError(w, "failed to save account", http.StatusInternalServerError)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "mailly_session",
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400,
+	})
+
+	jsonOK(w, map[string]interface{}{"ok": true, "account_id": account.ID})
 }
 
 func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {

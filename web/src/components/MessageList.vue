@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Message } from '../api/client'
 import { formatDateShort } from '../utils/format'
 import './MessageList.css'
 
-defineProps<{
+const props = defineProps<{
   messages: Message[]
   selectedMessages: Set<number>
   loading: boolean
@@ -19,27 +19,34 @@ const emit = defineEmits<{
   sort: [field: string]
   search: [query: string, field: string]
   refresh: []
+  prefetch: [uid: number]
 }>()
 
 const showSearch = ref(false)
 const searchQuery = ref('')
+
+const filteredMessages = computed(() => {
+  let m = props.messages
+  if (searchQuery.value) {
+    const q = searchQuery.value.toLowerCase()
+    m = m.filter(msg => 
+      (msg.subject && msg.subject.toLowerCase().includes(q)) || 
+      (msg.from && msg.from.toLowerCase().includes(q))
+    )
+  }
+  return m
+})
 </script>
 
 <template>
   <div class="message-list">
     <div class="list-header">
-      <v-btn icon size="x-small" variant="text" @click="showSearch = !showSearch">
+      <v-btn icon size="small" variant="text" @click="showSearch = !showSearch">
         <v-icon size="small">mdi-magnify</v-icon>
       </v-btn>
-      <span class="folder-title">{{ currentFolder || 'Inbox' }}</span>
+      <span class="folder-title" style="font-size: 16px; font-weight: 500;">{{ currentFolder || 'Inbox' }}</span>
       <v-spacer />
-      <v-btn icon size="x-small" variant="text">
-        <v-icon size="small">mdi-filter-variant</v-icon>
-      </v-btn>
-      <v-btn icon size="x-small" variant="text" @click="emit('sort', sortBy === 'date' ? 'from' : 'date')">
-        <v-icon size="small">mdi-sort</v-icon>
-      </v-btn>
-      <v-btn icon size="x-small" variant="text" @click="emit('refresh')">
+      <v-btn icon size="small" variant="text" @click="emit('refresh')">
         <v-icon size="small">mdi-refresh</v-icon>
       </v-btn>
     </div>
@@ -63,16 +70,17 @@ const searchQuery = ref('')
       <v-progress-circular indeterminate color="primary" size="24" />
     </div>
 
-    <div v-else-if="messages.length === 0" class="empty-state">
-      <span class="text-medium-emphasis">No message</span>
+    <div v-else-if="filteredMessages.length === 0" class="empty-state">
+      <span class="text-medium-emphasis">No message found</span>
     </div>
 
     <div v-else class="message-items">
       <div
-        v-for="msg in messages"
+        v-for="msg in filteredMessages"
         :key="msg.uid"
         class="message-item"
         :class="{ 'message-unread': !msg.is_read }"
+        @mouseenter="emit('prefetch', msg.uid)"
         @click="emit('open', msg.uid)"
       >
         <div class="msg-dot">

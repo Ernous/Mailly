@@ -62,3 +62,23 @@
 .ea-provider {
   font-size: 12px;
 }
+
+.custom-form {
+  margin-top: 10px;
+}
+
+/* ── Mobile: fullscreen ── */
+@media (max-width: 767px) {
+  .login-page {
+    align-items: flex-start;
+  }
+
+  .login-card {
+    width: 100%;
+    height: 100vh;
+    padding: 48px 24px 32px;
+    border-radius: 0;
+    border: none;
+    overflow-y: auto;
+  }
+}

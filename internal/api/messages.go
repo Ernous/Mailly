@@ -65,8 +65,10 @@ func (h *MessageHandler) ListFolders(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		displayName := strings.TrimPrefix(name, "[Gmail]/")
+		displayName = strings.TrimPrefix(displayName, "[GoogleMail]/")
 		folders = append(folders, map[string]interface{}{
 			"name":      displayName,
+			"full_name": name,
 			"delimiter": box.Delimiter,
 		})
 	}
@@ -348,7 +350,202 @@ func (h *MessageHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *MessageHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	creds, err := parseCredentials(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	creds, err = refreshCredentials(r.Context(), h.storage, creds)
+	if err != nil {
+		log.Printf("[IMAP] POST /api/message/mark-read - token refresh failed: %v", err)
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	folderName := r.URL.Query().Get("folder")
+	uidStr := r.URL.Query().Get("uid")
+	if folderName == "" || uidStr == "" {
+		jsonError(w, "folder and uid required", http.StatusBadRequest)
+		return
+	}
+
+	uid, err := strconv.ParseUint(uidStr, 10, 32)
+	if err != nil {
+		jsonError(w, "invalid uid", http.StatusBadRequest)
+		return
+	}
+
+	c, err := connectIMAP(creds)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer c.Logout()
+
+	_, err = c.Select(folderName, false)
+	if err != nil {
+		jsonError(w, "failed to select folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	seqset := new(imap.SeqSet)
+	seqset.AddNum(uint32(uid))
+
+	flags := []interface{}{imap.SeenFlag}
+	err = c.UidStore(seqset, imap.FormatFlagsOp(imap.AddFlags, true), flags, nil)
+	if err != nil {
+		jsonError(w, "failed to mark as read: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[IMAP] POST /api/message/mark-read - uid=%d folder=%s marked as read", uid, folderName)
+	jsonOK(w, map[string]interface{}{"ok": true})
+}
+
+func (h *MessageHandler) MarkUnread(w http.ResponseWriter, r *http.Request) {
+	creds, err := parseCredentials(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	creds, err = refreshCredentials(r.Context(), h.storage, creds)
+	if err != nil {
+		log.Printf("[IMAP] POST /api/message/mark-unread - token refresh failed: %v", err)
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	folderName := r.URL.Query().Get("folder")
+	uidStr := r.URL.Query().Get("uid")
+	if folderName == "" || uidStr == "" {
+		jsonError(w, "folder and uid required", http.StatusBadRequest)
+		return
+	}
+
+	uid, err := strconv.ParseUint(uidStr, 10, 32)
+	if err != nil {
+		jsonError(w, "invalid uid", http.StatusBadRequest)
+		return
+	}
+
+	c, err := connectIMAP(creds)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer c.Logout()
+
+	_, err = c.Select(folderName, false)
+	if err != nil {
+		jsonError(w, "failed to select folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	seqset := new(imap.SeqSet)
+	seqset.AddNum(uint32(uid))
+
+	flags := []interface{}{imap.SeenFlag}
+	err = c.UidStore(seqset, imap.FormatFlagsOp(imap.RemoveFlags, true), flags, nil)
+	if err != nil {
+		jsonError(w, "failed to mark as unread: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[IMAP] POST /api/message/mark-unread - uid=%d folder=%s marked as unread", uid, folderName)
+	jsonOK(w, map[string]interface{}{"ok": true})
+}
+
+func (h *MessageHandler) DeleteMessage(w http.ResponseWriter, r *http.Request) {
+	creds, err := parseCredentials(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	creds, err = refreshCredentials(r.Context(), h.storage, creds)
+	if err != nil {
+		log.Printf("[IMAP] DELETE /api/message - token refresh failed: %v", err)
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+
+	folderName := r.URL.Query().Get("folder")
+	uidStr := r.URL.Query().Get("uid")
+	if folderName == "" || uidStr == "" {
+		jsonError(w, "folder and uid required", http.StatusBadRequest)
+		return
+	}
+
+	uid, err := strconv.ParseUint(uidStr, 10, 32)
+	if err != nil {
+		jsonError(w, "invalid uid", http.StatusBadRequest)
+		return
+	}
+
+	c, err := connectIMAP(creds)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer c.Logout()
+
+	_, err = c.Select(folderName, false)
+	if err != nil {
+		jsonError(w, "failed to select folder: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	seqset := new(imap.SeqSet)
+	seqset.AddNum(uint32(uid))
+
+	// Determine trash folder name by provider
+	trashFolder := trashFolderName(creds.Provider)
+
+	if trashFolder != "" && folderName != trashFolder {
+		// Move to trash: COPY to trash, then delete original
+		if err := c.UidCopy(seqset, trashFolder); err != nil {
+			// Trash folder might have a different name — fall back to expunge
+			log.Printf("[IMAP] copy to trash failed (%q): %v — falling back to expunge", trashFolder, err)
+			trashFolder = ""
+		}
+	}
+
+	// Mark original as deleted
+	flags := []interface{}{imap.DeletedFlag}
+	if err := c.UidStore(seqset, imap.FormatFlagsOp(imap.AddFlags, true), flags, nil); err != nil {
+		jsonError(w, "failed to mark as deleted: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Expunge the original
+	if err := c.Expunge(nil); err != nil {
+		log.Printf("[IMAP] expunge warning: %v", err)
+	}
+
+	log.Printf("[IMAP] DELETE /api/message - uid=%d folder=%s trash=%s", uid, folderName, trashFolder)
+	jsonOK(w, map[string]interface{}{"ok": true})
+}
+
+// trashFolderName returns the IMAP trash folder name for the given provider.
+func trashFolderName(provider string) string {
+	switch provider {
+	case "google":
+		return "[Gmail]/Trash"
+	case "microsoft":
+		return "Deleted Items"
+	default:
+		return "Trash"
+	}
+}
+
 func refreshCredentials(ctx context.Context, storage store.Storage, creds *Credentials) (*Credentials, error) {
+	if creds.Provider == "custom" {
+		return creds, nil
+	}
+
 	accounts, err := storage.GetAccountsByUserID(ctx, UserIDFromContext(ctx))
 	if err != nil {
 		log.Printf("[REFRESH] GetAccountsByUserID: %v", err)
@@ -398,6 +595,14 @@ func connectIMAP(creds *Credentials) (*client.Client, error) {
 	c, err := client.DialTLS(addr, nil)
 	if err != nil {
 		return nil, fmt.Errorf("imap connect: %w", err)
+	}
+
+	if creds.Provider == "custom" {
+		if err := c.Login(creds.Email, creds.AccessToken); err != nil {
+			c.Close()
+			return nil, fmt.Errorf("imap login: %w", err)
+		}
+		return c, nil
 	}
 
 	mechanism := "XOAUTH2"

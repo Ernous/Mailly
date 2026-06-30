@@ -12,7 +12,11 @@ onMounted(async () => {
   await store.loadAccounts()
   checking.value = false
   if (store.accounts.value.length > 0) {
-    router.replace('/mail')
+    const { accountId, folder } = store.loadLastSession()
+    // Use restored account if it still exists, otherwise first account
+    const acc = (accountId && store.accounts.value.find(a => a.id === accountId))
+      || store.accounts.value[0]
+    router.replace({ name: 'mail-folder', params: { accountId: acc.id, folder } })
   } else {
     router.replace('/login')
   }
@@ -30,9 +34,10 @@ onMounted(async () => {
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  overflow: hidden !important;
   background: #121212;
   height: 100%;
+  max-height: 100vh;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }

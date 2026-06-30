@@ -28,6 +28,7 @@ export interface QuotaInfo {
 
 export interface Folder {
   name: string
+  full_name: string
   delimiter: string
 }
 
@@ -69,6 +70,13 @@ export const api = {
       body: JSON.stringify({ provider }),
     }),
 
+  connectCustom: (data: any) =>
+    request<{ ok: boolean; account_id: string }>('/accounts/custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }),
+
   getAccounts: () => request<Account[]>('/accounts').catch(() => []),
 
   deleteAccount: (id: string) =>
@@ -87,6 +95,24 @@ export const api = {
     request<FullMessage>(
       `/message?folder=${encodeURIComponent(folder)}&uid=${uid}`,
       { headers: accountHeaders(acc) }
+    ),
+
+  markRead: (acc: Account, folder: string, uid: number) =>
+    request<{ ok: boolean }>(
+      `/message/mark-read?folder=${encodeURIComponent(folder)}&uid=${uid}`,
+      { method: 'POST', headers: accountHeaders(acc) }
+    ).catch(() => ({ ok: false })),
+
+  markUnread: (acc: Account, folder: string, uid: number) =>
+    request<{ ok: boolean }>(
+      `/message/mark-unread?folder=${encodeURIComponent(folder)}&uid=${uid}`,
+      { method: 'POST', headers: accountHeaders(acc) }
+    ).catch(() => ({ ok: false })),
+
+  deleteMessage: (acc: Account, folder: string, uid: number) =>
+    request<{ ok: boolean }>(
+      `/message?folder=${encodeURIComponent(folder)}&uid=${uid}`,
+      { method: 'DELETE', headers: accountHeaders(acc) }
     ),
 
   getQuota: (acc: Account) =>

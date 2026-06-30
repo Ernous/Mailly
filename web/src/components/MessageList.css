@@ -56,6 +56,16 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
+/* Touch feedback on mobile */
+@media (max-width: 767px) {
+  .message-item:active {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  .message-item {
+    padding: 10px 14px;
+  }
+}
+
 .msg-dot {
   width: 12px;
   min-width: 12px;
@@ -114,6 +124,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.message-unread .msg-from {
+  color: #e0e0e0;
+  font-weight: 600;
 }
 
 .message-unread .msg-subject {

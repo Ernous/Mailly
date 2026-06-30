@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import type { Account } from '../api/client'
+import RichEditor from './RichEditor.vue'
 import './ComposeDialog.css'
+
+// Fullscreen on mobile
+const windowWidth = ref(window.innerWidth)
+const isMobileScreen = computed(() => windowWidth.value <= 767)
+function onResize() { windowWidth.value = window.innerWidth }
+onMounted(() => window.addEventListener('resize', onResize))
+onUnmounted(() => window.removeEventListener('resize', onResize))
 
 const props = defineProps<{
   show: boolean
@@ -16,9 +24,13 @@ const emit = defineEmits<{
 }>()
 
 const selectedIdentity = ref<Account | null>(null)
-const to = ref('')
-const cc = ref('')
-const bcc = ref('')
+const toRecipients = ref<string[]>([])
+const ccRecipients = ref<string[]>([])
+const bccRecipients = ref<string[]>([])
+const toInput = ref('')
+const ccInput = ref('')
+const bccInput = ref('')
+const showCcBcc = ref(false)
 const subject = ref('')
 const body = ref('')
 const attachments = ref<File[]>([])
@@ -28,30 +40,116 @@ watch(() => props.show, (val) => {
   if (val) {
     selectedIdentity.value = props.selectedAccount
     if (props.replyTo) {
-      to.value = props.replyTo.to
-      subject.value = props.replyTo.subject.startsWith('Re:') ? props.replyTo.subject : `Re: ${props.replyTo.subject}`
-      body.value = `\n\n--- Original Message ---\n${props.replyTo.body}`
-      cc.value = ''
-      bcc.value = ''
+      // Parse "to" into recipients
+      toRecipients.value = props.replyTo.to
+        ? props.replyTo.to.split(',').map(s => s.trim()).filter(Boolean)
+        : []
+      subject.value = props.replyTo.subject.startsWith('Re:')
+        ? props.replyTo.subject
+        : `Re: ${props.replyTo.subject}`
+      // Wrap reply body in blockquote HTML
+      const quoted = props.replyTo.body
+        ? `<p></p><blockquote>${props.replyTo.body.replace(/\n/g, '<br>')}</blockquote>`
+        : ''
+      body.value = quoted
+      ccRecipients.value = []
+      bccRecipients.value = []
     } else {
-      to.value = ''
-      cc.value = ''
-      bcc.value = ''
+      toRecipients.value = []
+      ccRecipients.value = []
+      bccRecipients.value = []
       subject.value = ''
       body.value = ''
     }
+    toInput.value = ''
+    ccInput.value = ''
+    bccInput.value = ''
+    showCcBcc.value = false
     attachments.value = []
   }
 })
 
+function addRecipient(list: string[], inputVal: string, clearFn: () => void) {
+  const email = inputVal.trim()
+  if (email && !list.includes(email)) {
+    list.push(email)
+  }
+  clearFn()
+}
+
+function onToKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',' || e.key === ' ' || e.key === 'Tab') {
+    e.preventDefault()
+    addRecipient(toRecipients.value, toInput.value, () => { toInput.value = '' })
+  } else if (e.key === 'Backspace' && toInput.value === '' && toRecipients.value.length > 0) {
+    toRecipients.value.pop()
+  }
+}
+
+function onCcKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',' || e.key === ' ' || e.key === 'Tab') {
+    e.preventDefault()
+    addRecipient(ccRecipients.value, ccInput.value, () => { ccInput.value = '' })
+  } else if (e.key === 'Backspace' && ccInput.value === '' && ccRecipients.value.length > 0) {
+    ccRecipients.value.pop()
+  }
+}
+
+function onBccKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',' || e.key === ' ' || e.key === 'Tab') {
+    e.preventDefault()
+    addRecipient(bccRecipients.value, bccInput.value, () => { bccInput.value = '' })
+  } else if (e.key === 'Backspace' && bccInput.value === '' && bccRecipients.value.length > 0) {
+    bccRecipients.value.pop()
+  }
+}
+
+function onToBlur() {
+  if (toInput.value.trim()) {
+    addRecipient(toRecipients.value, toInput.value, () => { toInput.value = '' })
+  }
+}
+
+function onCcBlur() {
+  if (ccInput.value.trim()) {
+    addRecipient(ccRecipients.value, ccInput.value, () => { ccInput.value = '' })
+  }
+}
+
+function onBccBlur() {
+  if (bccInput.value.trim()) {
+    addRecipient(bccRecipients.value, bccInput.value, () => { bccInput.value = '' })
+  }
+}
+
+function removeToRecipient(email: string) {
+  const idx = toRecipients.value.indexOf(email)
+  if (idx !== -1) toRecipients.value.splice(idx, 1)
+}
+
+function removeCcRecipient(email: string) {
+  const idx = ccRecipients.value.indexOf(email)
+  if (idx !== -1) ccRecipients.value.splice(idx, 1)
+}
+
+function removeBccRecipient(email: string) {
+  const idx = bccRecipients.value.indexOf(email)
+  if (idx !== -1) bccRecipients.value.splice(idx, 1)
+}
+
 function handleSend() {
+  // Flush any pending input
+  if (toInput.value.trim()) {
+    toRecipients.value.push(toInput.value.trim())
+    toInput.value = ''
+  }
   sending.value = true
   emit('send', {
-    to: to.value,
-    cc: cc.value,
-    bcc: bcc.value,
+    to: toRecipients.value.join(', '),
+    cc: ccRecipients.value.join(', '),
+    bcc: bccRecipients.value.join(', '),
     subject: subject.value,
-    body: body.value,
+    body: body.value,   // now HTML
     attachments: attachments.value,
   })
   setTimeout(() => {
@@ -79,7 +177,13 @@ function removeAttachment(index: number) {
 </script>
 
 <template>
-  <v-dialog :model-value="show" max-width="700" @click:outside="emit('close')">
+  <v-dialog
+    :model-value="show"
+    max-width="700"
+    :fullscreen="isMobileScreen"
+    :transition="isMobileScreen ? 'dialog-bottom-transition' : 'dialog-transition'"
+    @click:outside="emit('close')"
+  >
     <v-card class="compose-card">
       <div class="compose-toolbar">
         <span class="text-body-2 font-weight-medium">
@@ -106,22 +210,77 @@ function removeAttachment(index: number) {
           />
         </div>
 
-        <div class="compose-field">
+        <!-- To field with tags -->
+        <div class="compose-field compose-field-tags">
           <span class="field-label text-caption text-medium-emphasis">To:</span>
-          <v-text-field
-            v-model="to"
-            density="compact"
-            variant="plain"
-            placeholder="recipients..."
-            hide-details
-            class="flex-grow-1"
-          />
+          <div class="tags-input-wrap">
+            <span
+              v-for="email in toRecipients"
+              :key="email"
+              class="recipient-tag"
+            >
+              {{ email }}
+              <button class="tag-remove" @click.stop="removeToRecipient(email)">×</button>
+            </span>
+            <input
+              v-model="toInput"
+              class="tags-input"
+              placeholder="Add recipients..."
+              @keydown="onToKeydown"
+              @blur="onToBlur"
+            />
+          </div>
+          <button
+            v-if="!showCcBcc"
+            class="cc-bcc-toggle"
+            @click="showCcBcc = true"
+          >
+            Cc/Bcc
+          </button>
         </div>
 
-        <div class="compose-field">
-          <v-btn size="x-small" variant="text" class="text-caption">
-            Cc/Bcc
-          </v-btn>
+        <!-- Cc field -->
+        <div v-if="showCcBcc" class="compose-field compose-field-tags">
+          <span class="field-label text-caption text-medium-emphasis">Cc:</span>
+          <div class="tags-input-wrap">
+            <span
+              v-for="email in ccRecipients"
+              :key="email"
+              class="recipient-tag"
+            >
+              {{ email }}
+              <button class="tag-remove" @click.stop="removeCcRecipient(email)">×</button>
+            </span>
+            <input
+              v-model="ccInput"
+              class="tags-input"
+              placeholder="Add Cc..."
+              @keydown="onCcKeydown"
+              @blur="onCcBlur"
+            />
+          </div>
+        </div>
+
+        <!-- Bcc field -->
+        <div v-if="showCcBcc" class="compose-field compose-field-tags">
+          <span class="field-label text-caption text-medium-emphasis">Bcc:</span>
+          <div class="tags-input-wrap">
+            <span
+              v-for="email in bccRecipients"
+              :key="email"
+              class="recipient-tag"
+            >
+              {{ email }}
+              <button class="tag-remove" @click.stop="removeBccRecipient(email)">×</button>
+            </span>
+            <input
+              v-model="bccInput"
+              class="tags-input"
+              placeholder="Add Bcc..."
+              @keydown="onBccKeydown"
+              @blur="onBccBlur"
+            />
+          </div>
         </div>
 
         <div class="compose-field">
@@ -155,13 +314,10 @@ function removeAttachment(index: number) {
           </div>
         </div>
 
-        <v-textarea
+        <RichEditor
           v-model="body"
-          variant="plain"
-          rows="12"
           placeholder="Write your message..."
-          hide-details
-          class="compose-body"
+          class="compose-rich-editor"
         />
       </v-card-text>
 
@@ -175,7 +331,7 @@ function removeAttachment(index: number) {
           color="primary"
           size="small"
           :loading="sending"
-          :disabled="!to || !subject"
+          :disabled="toRecipients.length === 0 && !toInput || !subject"
           @click="handleSend"
         >
           <v-icon start size="small">mdi-send</v-icon>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { FullMessage } from '../api/client'
 import { formatDateTime } from '../utils/format'
 import './MessageView.css'
@@ -14,7 +14,11 @@ const emit = defineEmits<{
   replyAll: []
   forward: []
   delete: []
+  markUnread: []
+  markRead: []
 }>()
+
+const showMoreMenu = ref(false)
 
 const iframeSrcdoc = computed(() => {
   if (!props.message?.html_body) return ''
@@ -24,6 +28,9 @@ const iframeSrcdoc = computed(() => {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
+  html {
+    overflow-x: hidden;
+  }
   body {
     margin: 0;
     padding: 16px;
@@ -34,22 +41,48 @@ const iframeSrcdoc = computed(() => {
     line-height: 1.6;
     word-wrap: break-word;
     overflow-x: hidden;
+    /* Force content to never exceed viewport */
+    max-width: 100%;
+    box-sizing: border-box;
   }
   * {
     background-color: transparent !important;
     color: #e0e0e0 !important;
     border-color: #444 !important;
+    /* Every element respects container width */
+    max-width: 100% !important;
+    box-sizing: border-box;
+  }
+  /* Tables are the main culprit in email layouts */
+  table {
+    width: 100% !important;
+    table-layout: fixed !important;
+  }
+  td, th {
+    word-break: break-word;
+  }
+  img {
+    max-width: 100% !important;
+    height: auto !important;
   }
   a { color: #80cbc4 !important; }
-  img { max-width: 100%; height: auto; }
-  table { max-width: 100%; }
-  blockquote { border-left: 3px solid #555; padding-left: 12px; color: #aaa; }
-  pre, code { background: #2a2a2a !important; color: #ccc !important; padding: 8px; border-radius: 4px; overflow-x: auto; }
+  blockquote { border-left: 3px solid #555; padding-left: 12px; color: #aaa; margin: 8px 0; }
+  pre, code { background: #2a2a2a !important; color: #ccc !important; padding: 8px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
 </style>
 </head>
 <body>${props.message.html_body}</body>
 </html>`
 })
+
+function onIframeLoad(e: Event) {
+  const iframe = e.target as HTMLIFrameElement
+  try {
+    const doc = iframe.contentDocument?.documentElement
+    if (!doc) return
+    // Set iframe height to match content (no JS scaling needed — CSS handles width)
+    iframe.style.height = doc.scrollHeight + 'px'
+  } catch {}
+}
 </script>
 
 <template>
@@ -60,6 +93,54 @@ const iframeSrcdoc = computed(() => {
     </div>
 
     <template v-else>
+      <!-- Action Toolbar -->
+      <div class="msg-toolbar">
+        <button class="toolbar-btn" title="Reply" @click="emit('reply')">
+          <span class="toolbar-icon">↩</span>
+          <span class="toolbar-label">Ответить</span>
+        </button>
+
+        <div class="toolbar-btn-group">
+          <button class="toolbar-btn" title="Reply All" @click="emit('replyAll')">
+            <span class="toolbar-icon">↩↩</span>
+            <span class="toolbar-label">Ответить в...</span>
+          </button>
+        </div>
+
+        <div class="toolbar-btn-group">
+          <button class="toolbar-btn" title="Forward" @click="emit('forward')">
+            <span class="toolbar-icon">↪</span>
+            <span class="toolbar-label">Переслать</span>
+          </button>
+        </div>
+
+        <div class="toolbar-divider"></div>
+
+        <button class="toolbar-btn toolbar-btn-danger" title="Delete" @click="emit('delete')">
+          <v-icon size="18">mdi-delete-outline</v-icon>
+          <span class="toolbar-label">Удалить</span>
+        </button>
+
+        <div class="toolbar-divider"></div>
+
+        <v-menu v-model="showMoreMenu" :close-on-content-click="true" location="bottom start">
+          <template #activator="{ props: menuProps }">
+            <button class="toolbar-btn" title="Mark" v-bind="menuProps">
+              <v-icon size="18">mdi-tag-outline</v-icon>
+              <span class="toolbar-label">Пометить</span>
+            </button>
+          </template>
+          <v-list density="compact" class="toolbar-menu">
+            <v-list-item @click="emit('markRead')" prepend-icon="mdi-email-open-outline">
+              <v-list-item-title>Как прочитанное</v-list-item-title>
+            </v-list-item>
+            <v-list-item @click="emit('markUnread')" prepend-icon="mdi-email-outline">
+              <v-list-item-title>Как непрочитанное</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+      </div>
+
       <div class="msg-header">
         <div class="msg-subject">{{ message.subject || '(No subject)' }}</div>
         <div class="msg-headers">
@@ -97,6 +178,7 @@ const iframeSrcdoc = computed(() => {
           class="msg-iframe"
           sandbox="allow-same-origin"
           frameborder="0"
+          @load="onIframeLoad"
         />
         <div v-else class="msg-text">{{ message.text_body }}</div>
       </div>

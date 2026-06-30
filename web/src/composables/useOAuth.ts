@@ -17,7 +17,11 @@ export function useOAuth() {
           window.removeEventListener('message', handler)
           popup?.close()
           connecting.value = false
-          router.push('/mail')
+          if (e.data.account_id) {
+            router.push(`/mail/${e.data.account_id}/INBOX`)
+          } else {
+            router.push('/mail')
+          }
         }
       }
       window.addEventListener('message', handler)

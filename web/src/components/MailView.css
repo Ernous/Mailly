@@ -12,13 +12,29 @@
   width: 100%;
   overflow: hidden;
   background: #121212;
+  /* Prevent any scroll bleed-through when a dialog is open */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* ── Columns (desktop) ─────────────────────────── */
+.sidebar-col {
+  display: flex;
+  flex-shrink: 0;
+  /* width is driven by the inner .sidebar element */
 }
 
 .mail-list-col {
   width: 360px;
-  min-width: 360px;
+  min-width: 260px;
   flex-shrink: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;  /* FAB anchors to this */
 }
 
 .mail-view-col {
@@ -27,10 +43,148 @@
   overflow: hidden;
 }
 
+/* Mobile top bars — hidden on desktop */
+.mobile-topbar {
+  display: none;
+}
+
+/* ── Compose FAB ───────────────────────────────── */
 .compose-fab {
-  position: fixed;
+  position: absolute !important;
   bottom: 24px;
-  left: calc(var(--sidebar-w, 250px) + 30px);
+  right: 20px;
   z-index: 10;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* When compose dialog is open — block scroll on the shell behind it */
+.shell-dialog-open .mail-view-col,
+.shell-dialog-open .mail-list-col {
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.shell-dialog-open .mail-view-col :deep(.message-view) {
+  overflow: hidden;
+}
+   Sidebar collapses to icon rail (handled by JS),
+   message list gets a bit narrower
+══════════════════════════════════════════════════ */
+@media (max-width: 1024px) and (min-width: 768px) {
+  .mail-list-col {
+    width: 280px;
+    min-width: 220px;
+  }
+}
+
+/* ══════════════════════════════════════════════════
+   MOBILE  < 768px
+   Single-panel view: sidebar | list | message
+══════════════════════════════════════════════════ */
+@media (max-width: 767px) {
+  .mail-shell {
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* All columns become full-screen panels */
+  .sidebar-col,
+  .mail-list-col,
+  .mail-view-col {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                opacity 0.28s ease;
+    overflow: hidden;
+  }
+
+  /* Default positions */
+  .sidebar-col {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 20;
+  }
+  .mail-list-col {
+    transform: translateX(0);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .mail-view-col {
+    transform: translateX(100%);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Active panel */
+  .sidebar-col.mobile-active,
+  .mail-list-col.mobile-active,
+  .mail-view-col.mobile-active {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Sidebar full width on mobile */
+  .sidebar-col :deep(.sidebar) {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Hide resize handle on mobile */
+  .sidebar-col :deep(.resize-handle) {
+    display: none;
+  }
+
+  /* Mobile top bar */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    min-height: 48px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .mobile-topbar-title {
+    flex: 1;
+    font-size: 15px;
+    font-weight: 500;
+    color: #e0e0e0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mail-view-col {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mail-view-col :deep(.message-view) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* Hide built-in list header on mobile (replaced by mobile-topbar) */
+  .mail-list-col :deep(.list-header) {
+    display: none;
+  }
+
+  .mail-list-col :deep(.message-list) {
+    height: 100%;
+  }
+
+  .sidebar-col :deep(.account-menu) {
+    left: 8px;
+    right: 8px;
+  }
 }

@@ -11,27 +11,35 @@ const props = defineProps<{
   folders: Folder[]
   selectedFolder: string
   quota: QuotaInfo
+  collapsed?: boolean   // icon-only rail mode (auto on tablet)
+  isMobile?: boolean    // mobile fullscreen panel mode
 }>()
 
 const emit = defineEmits<{
   selectFolder: [folder: string]
   switchAccount: [account: Account]
   addAccount: []
+  toggleCollapse: []   // user clicked the toggle button
 }>()
 
 const menuOpen = ref(false)
 const dragging = ref(false)
-const sidebarWidth = ref(250)
+
+const STORAGE_KEY_WIDTH = 'sidebar-width'
+const DEFAULT_WIDTH = 250
+
+const savedWidth = parseInt(localStorage.getItem(STORAGE_KEY_WIDTH) || String(DEFAULT_WIDTH), 10)
+const sidebarWidth = ref(isNaN(savedWidth) ? DEFAULT_WIDTH : Math.max(180, Math.min(500, savedWidth)))
 
 onMounted(() => {
-  setSidebarWidth(250)
+  setSidebarWidth(sidebarWidth.value)
 })
 
 function setSidebarWidth(w: number) {
+  sidebarWidth.value = w
+  localStorage.setItem(STORAGE_KEY_WIDTH, String(w))
   const shell = document.querySelector('.mail-shell') as HTMLElement | null
-  if (shell) {
-    shell.style.setProperty('--sidebar-w', w + 'px')
-  }
+  if (shell) shell.style.setProperty('--sidebar-w', w + 'px')
 }
 
 function startResize(e: MouseEvent) {
@@ -41,7 +49,6 @@ function startResize(e: MouseEvent) {
 
   function onMove(ev: MouseEvent) {
     const newW = Math.max(180, Math.min(500, startW + ev.clientX - startX))
-    sidebarWidth.value = newW
     setSidebarWidth(newW)
   }
 
@@ -120,17 +127,39 @@ function providerPage() {
 </script>
 
 <template>
-  <div class="sidebar" :class="{ 'is-dragging': dragging }">
-    <div class="user-header" @click="toggleMenu">
-      <v-avatar size="32" color="#4d8080" class="mr-3">
+  <div class="sidebar" :class="{ 'is-dragging': dragging, 'sidebar-collapsed': collapsed }">
+
+    <!-- ── Collapsed rail: avatar only ── -->
+    <div v-if="collapsed" class="rail-header">
+      <v-avatar
+        size="32" color="#4d8080"
+        class="rail-avatar"
+        :title="selectedAccount?.email"
+        @click="toggleMenu"
+      >
         <v-img v-if="selectedAccount?.photo_url" :src="selectedAccount.photo_url" alt="" cover />
         <v-icon v-else size="small" color="white">mdi-account</v-icon>
       </v-avatar>
-      <div class="user-info">
+    </div>
+
+    <!-- ── Expanded header ── -->
+    <div v-else class="user-header">
+      <v-avatar size="32" color="#4d8080" class="mr-3" style="cursor:pointer" @click="toggleMenu">
+        <v-img v-if="selectedAccount?.photo_url" :src="selectedAccount.photo_url" alt="" cover />
+        <v-icon v-else size="small" color="white">mdi-account</v-icon>
+      </v-avatar>
+      <div class="user-info" style="cursor:pointer" @click="toggleMenu">
         <div class="user-name">{{ selectedAccount?.display_name || selectedAccount?.email || 'User' }}</div>
         <div class="user-email">{{ selectedAccount?.email || '' }}</div>
       </div>
-      <v-icon size="small" color="grey">mdi-chevron-down</v-icon>
+      <!-- On mobile: close sidebar. On desktop: collapse to rail -->
+      <button
+        class="collapse-btn"
+        :title="isMobile ? 'Close' : 'Collapse sidebar'"
+        @click.stop="emit('toggleCollapse')"
+      >
+        <v-icon size="16">{{ isMobile ? 'mdi-arrow-left' : 'mdi-chevron-left' }}</v-icon>
+      </button>
     </div>
 
     <div v-show="menuOpen" class="account-menu-backdrop" @click="closeMenu" />
@@ -152,13 +181,6 @@ function providerPage() {
         </div>
         <div class="am-current-name">{{ selectedAccount?.display_name || 'User' }}</div>
         <div class="am-current-email">{{ selectedAccount?.email || '' }}</div>
-        <a
-          v-if="selectedAccount?.provider"
-          :href="providerPage()"
-          target="_blank"
-          class="am-current-link"
-          @click.stop
-        >My {{ providerLabel }} account</a>
       </div>
 
       <!-- Other accounts -->
@@ -192,7 +214,8 @@ function providerPage() {
       </div>
     </div>
 
-    <div v-if="selectedAccount && quota.total > 0" class="quota-bar">
+    <!-- Quota: hide in collapsed mode -->
+    <div v-if="!collapsed && selectedAccount && quota.total > 0" class="quota-bar">
       <v-progress-linear
         :model-value="quotaPct"
         color="primary"
@@ -202,27 +225,37 @@ function providerPage() {
       <div class="quota-text text-caption text-medium-emphasis mt-1">{{ quotaLabel }}</div>
     </div>
 
+    <!-- Folders -->
     <div v-if="folders.length > 0" class="folders-section">
       <div
         v-for="f in folders"
-        :key="f.name"
+        :key="f.full_name"
         class="folder-item"
-        :class="{ 'folder-active': selectedFolder === f.name }"
-        @click="emit('selectFolder', f.name)"
+        :class="{ 'folder-active': selectedFolder === f.full_name }"
+        :title="collapsed ? f.name : undefined"
+        @click="emit('selectFolder', f.full_name)"
       >
-        <v-icon size="small" class="folder-icon" :class="{ 'folder-active-icon': selectedFolder === f.name }">
-          {{ folderIcon(f.name) }}
-        </v-icon>
-        <span class="folder-name">{{ f.name }}</span>
+        <span class="folder-icon-wrap">
+          <v-icon size="small" class="folder-icon" :class="{ 'folder-active-icon': selectedFolder === f.full_name }">
+            {{ folderIcon(f.name) }}
+          </v-icon>
+        </span>
+        <span v-if="!collapsed" class="folder-name">{{ f.name }}</span>
       </div>
     </div>
     <div v-else class="folders-section d-flex align-center justify-center pa-4">
       <v-progress-circular indeterminate size="20" width="2" color="grey" />
     </div>
+
     <div
       class="resize-handle"
       :class="{ 'resize-active': dragging }"
       @mousedown.prevent="startResize"
     />
+
+    <!-- Expand button at bottom of rail (collapsed mode only) -->
+    <button v-if="collapsed" class="rail-expand-btn" title="Expand sidebar" @click.stop="emit('toggleCollapse')">
+      <v-icon size="18">mdi-chevron-right</v-icon>
+    </button>
   </div>
 </template>

@@ -3,12 +3,7 @@
   flex-direction: column;
   height: 100%;
   background: #1e1e1e;
-  overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.message-view::-webkit-scrollbar {
-  display: none;
+  overflow: hidden;  /* no scroll on root — only body scrolls */
 }
 
 .message-view .empty-state {
@@ -20,6 +15,125 @@
   gap: 8px;
 }
 
+/* ── Toolbar ─────────────────────────────────────────── */
+.msg-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  background: #252525;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.toolbar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #bbb;
+  font-size: 11px;
+  line-height: 1.2;
+  transition: background 0.15s, color 0.15s;
+  min-width: 44px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.toolbar-btn:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e0e0e0;
+}
+
+.toolbar-btn:active {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.toolbar-btn .toolbar-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.toolbar-btn .toolbar-label {
+  font-size: 11px;
+  color: inherit;
+}
+
+.toolbar-btn-group {
+  display: flex;
+  align-items: stretch;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.toolbar-btn-group .toolbar-btn {
+  border-radius: 0;
+}
+
+.toolbar-btn-group .toolbar-btn:first-child {
+  border-radius: 4px 0 0 4px;
+}
+
+.toolbar-btn-arrow {
+  min-width: 16px !important;
+  padding: 5px 4px !important;
+  border-left: 1px solid #3a3a3a !important;
+}
+
+.toolbar-btn-danger:hover {
+  color: #ef9a9a;
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 32px;
+  background: #3a3a3a;
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.toolbar-menu {
+  background: #2a2a2a !important;
+  border: 1px solid #444;
+  border-radius: 6px;
+  min-width: 180px;
+}
+
+/* Mobile: compact toolbar, hide labels */
+@media (max-width: 767px) {
+  .msg-toolbar {
+    padding: 4px 8px;
+    gap: 0;
+  }
+
+  .toolbar-btn {
+    min-width: 36px;
+    padding: 6px 8px;
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .toolbar-btn .toolbar-label {
+    display: none;
+  }
+
+  .toolbar-btn .toolbar-icon {
+    font-size: 18px;
+  }
+
+  .toolbar-divider {
+    height: 24px;
+    margin: 0 2px;
+  }
+}
+
+/* ── Header ────────────────────────────────────────── */
 .message-view .msg-header {
   padding: 20px 24px 12px;
   border-bottom: 1px solid #333;
@@ -54,8 +168,27 @@
 
 .message-view .header-value {
   color: #ccc;
+  word-break: break-word;
 }
 
+/* Mobile header adjustments */
+@media (max-width: 767px) {
+  .message-view .msg-header {
+    padding: 14px 16px 10px;
+  }
+
+  .message-view .msg-subject {
+    font-size: 17px;
+    margin-bottom: 10px;
+  }
+
+  .message-view .header-row {
+    font-size: 12px;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Attachments ─────────────────────────────────── */
 .message-view .msg-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -74,17 +207,39 @@
   color: #ccc;
 }
 
+@media (max-width: 767px) {
+  .message-view .msg-attachments {
+    padding: 10px 16px;
+  }
+}
+
+/* ── Body ───────────────────────────────────────── */
 .message-view .msg-body {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #444 transparent;
+}
+.message-view .msg-body::-webkit-scrollbar {
+  width: 6px;
+}
+.message-view .msg-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.message-view .msg-body::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 3px;
 }
 
 .message-view .msg-iframe {
   width: 100%;
-  height: 100%;
-  min-height: 500px;
+  height: auto;
+  min-height: 200px;
   border: none;
   background: #1e1e1e;
+  display: block;
 }
 
 .message-view .msg-text {
@@ -94,4 +249,11 @@
   line-height: 1.7;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+@media (max-width: 767px) {
+  .message-view .msg-text {
+    padding: 16px;
+    font-size: 15px;
+  }
 }
