@@ -1,0 +1,25 @@
+# Binaries
+mailly
+*.exe
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
+
+# Database
+data/
+
+# Node
+web/node_modules/
+web/dist/

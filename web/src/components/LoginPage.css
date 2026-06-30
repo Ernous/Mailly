@@ -1,0 +1,64 @@
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #121212;
+}
+
+.login-card {
+  width: 400px;
+  padding: 40px;
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 12px;
+}
+
+.login-logo {
+  text-align: center;
+}
+
+.oauth-btn {
+  height: 48px;
+  font-size: 15px;
+  text-transform: none;
+  border-color: #444;
+}
+.oauth-btn:hover {
+  border-color: #666;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.existing-accounts {
+  margin-bottom: 4px;
+}
+
+.existing-account-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.1s;
+  margin-bottom: 2px;
+}
+.existing-account-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ea-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ea-email {
+  font-size: 14px;
+  color: #e0e0e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ea-provider {
+  font-size: 12px;
+}
