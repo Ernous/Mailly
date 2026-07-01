@@ -9,8 +9,6 @@
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   position: relative;
   flex-shrink: 0;
 }
@@ -21,9 +19,6 @@
     min-width: 100% !important;
     max-width: 100% !important;
   }
-}
-.sidebar::-webkit-scrollbar {
-  display: none;
 }
 .sidebar.is-dragging {
   user-select: none;
@@ -398,11 +393,6 @@
   flex: 1;
   overflow-y: auto;
   padding-top: 4px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.folders-section::-webkit-scrollbar {
-  display: none;
 }
 
 .folder-item {

@@ -12,7 +12,6 @@ rm -rf cmd/server/dist
 cp -r web/dist cmd/server/dist
 
 echo "Building Backend..."
-# Detect OS and set output binary name
 if [[ "$OSTYPE" == "darwin"* ]]; then
     OUTPUT="mailly"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then

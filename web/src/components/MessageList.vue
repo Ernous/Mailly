@@ -11,6 +11,9 @@ const props = defineProps<{
   currentFolder: string
   sortBy: string
   sortAsc: boolean
+  currentPage: number
+  totalPages: number
+  totalMessages: number
 }>()
 
 const emit = defineEmits<{
@@ -20,6 +23,7 @@ const emit = defineEmits<{
   search: [query: string, field: string]
   refresh: []
   prefetch: [uid: number]
+  goToPage: [page: number]
 }>()
 
 const showSearch = ref(false)
@@ -66,7 +70,7 @@ const filteredMessages = computed(() => {
       </div>
     </v-expand-transition>
 
-    <div v-if="loading" class="d-flex align-center justify-center pa-6">
+    <div v-if="loading" class="list-loading">
       <v-progress-circular indeterminate color="primary" size="24" />
     </div>
 
@@ -97,6 +101,23 @@ const filteredMessages = computed(() => {
           </div>
         </div>
       </div>
+    </div>
+
+    <!-- Pagination: outside scroll area, always pinned to bottom -->
+    <div v-if="totalPages > 1" class="pagination-bar">
+      <button class="page-btn" :disabled="currentPage <= 1" @click="emit('goToPage', 1)" title="First">
+        <v-icon size="14">mdi-page-first</v-icon>
+      </button>
+      <button class="page-btn" :disabled="currentPage <= 1" @click="emit('goToPage', currentPage - 1)" title="Previous">
+        <v-icon size="14">mdi-chevron-left</v-icon>
+      </button>
+      <span class="page-info">{{ currentPage }} / {{ totalPages }}</span>
+      <button class="page-btn" :disabled="currentPage >= totalPages" @click="emit('goToPage', currentPage + 1)" title="Next">
+        <v-icon size="14">mdi-chevron-right</v-icon>
+      </button>
+      <button class="page-btn" :disabled="currentPage >= totalPages" @click="emit('goToPage', totalPages)" title="Last">
+        <v-icon size="14">mdi-page-last</v-icon>
+      </button>
     </div>
   </div>
 </template>

@@ -38,19 +38,30 @@ html, body {
   background: #121212;
   height: 100%;
   max-height: 100vh;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-html::-webkit-scrollbar, body::-webkit-scrollbar {
-  display: none;
 }
 
+/* ── Minimal scrollbar ── */
 * {
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #3a3a3a transparent;
 }
 *::-webkit-scrollbar {
-  display: none;
+  width: 4px;
+  height: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 2px;
+  transition: background 0.2s;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #4d8080;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .loading-screen {

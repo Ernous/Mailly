@@ -38,7 +38,10 @@ function toggleSidebarCollapse() {
 
 function onResize() { windowWidth.value = window.innerWidth }
 onMounted(() => window.addEventListener('resize', onResize))
-onUnmounted(() => window.removeEventListener('resize', onResize))
+onUnmounted(() => {
+  window.removeEventListener('resize', onResize)
+  store.stopAutoRefresh()
+})
 
 // Keep --sidebar-w CSS var in sync with collapsed state
 watch(sidebarCollapsed, (collapsed) => {
@@ -85,6 +88,7 @@ onMounted(async () => {
     await store.loadMessages(acc, folderFullName)
   }
   loading.value = false
+  store.startAutoRefresh()
 })
 
 watch(() => store.selectedAccountId.value, (id) => {
@@ -107,7 +111,7 @@ function onFolderSelect(folder: string) {
   const acc = store.selectedAccount.value
   if (acc) {
     store.loadMessages(acc, folder)
-    // On mobile, go to list after selecting a folder
+    store.startAutoRefresh()
     mobilePanel.value = 'list'
   }
 }
@@ -235,12 +239,16 @@ function onComposeClose() {
         :current-folder="store.selectedFolderDisplayName.value"
         :sort-by="store.sortBy.value"
         :sort-asc="store.sortAsc.value"
+        :current-page="store.currentPage.value"
+        :total-pages="store.totalPages.value"
+        :total-messages="store.totalMessages.value"
         @open="onMessageOpen"
         @select-all="store.selectAllMessages"
         @refresh="onRefresh"
         @sort="(f) => store.sortBy.value = f"
         @search="(q, f) => {}"
         @prefetch="(uid) => { const acc = store.selectedAccount.value; if (acc) store.prefetchMessage(acc, uid) }"
+        @go-to-page="(page) => { const acc = store.selectedAccount.value; if (acc) { store.loadMessages(acc, store.selectedFolderName.value, page); mobilePanel = 'list' } }"
       />
       <!-- Compose FAB: anchored inside the list column, not fixed to viewport -->
       <v-btn

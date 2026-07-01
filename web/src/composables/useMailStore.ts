@@ -17,6 +17,12 @@ const sortBy = ref('date')
 const sortAsc = ref(false)
 const quota = ref<QuotaInfo>({ used: 0, total: 0 })
 
+// ── Pagination ────────────────────────────────────────────────────────────
+const currentPage = ref(1)
+const totalPages = ref(1)
+const totalMessages = ref(0)
+const pageSize = ref(50)
+
 // ── Persistence ───────────────────────────────────────────────────────────
 const STORAGE_KEY_ACCOUNT = 'last-account-id'
 const STORAGE_KEY_FOLDER  = 'last-folder'
@@ -32,7 +38,8 @@ function loadLastSession(): { accountId: string | null; folder: string } {
     folder: localStorage.getItem(STORAGE_KEY_FOLDER) || 'INBOX',
   }
 }
-// Key: `${accountId}:${folder}:${uid}`
+
+// ── Message cache ─────────────────────────────────────────────────────────
 const messageCache = new Map<string, FullMessage>()
 const MAX_CACHE = 100
 
@@ -47,18 +54,53 @@ function cacheGet(accId: string, folder: string, uid: number) {
 function cacheSet(accId: string, folder: string, uid: number, msg: FullMessage) {
   const key = cacheKey(accId, folder, uid)
   if (messageCache.size >= MAX_CACHE) {
-    // evict oldest entry
-    messageCache.delete(messageCache.keys().next().value)
+    const first = messageCache.keys().next().value
+    if (first !== undefined) messageCache.delete(first)
   }
   messageCache.set(key, msg)
 }
 
+// ── Auto-refresh ──────────────────────────────────────────────────────────
+const AUTO_REFRESH_INTERVAL = 60_000
+let refreshTimer: ReturnType<typeof setInterval> | null = null
+
+function startAutoRefresh() {
+  stopAutoRefresh()
+  refreshTimer = setInterval(silentRefresh, AUTO_REFRESH_INTERVAL)
+}
+
+function stopAutoRefresh() {
+  if (refreshTimer !== null) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+}
+
+async function silentRefresh() {
+  const acc = accounts.value.find(a => a.id === selectedAccountId.value) ?? null
+  if (!acc || messagesLoading.value) return
+  try {
+    const res = await api.getMessages(acc, selectedFolderName.value, pageSize.value, 1)
+    const incoming = res.messages || []
+    if (incoming.length === 0) return
+    const existingUids = new Set(messages.value.map(m => m.uid))
+    const newMsgs = incoming.filter(m => !existingUids.has(m.uid))
+    if (newMsgs.length > 0) {
+      messages.value = [...newMsgs, ...messages.value]
+      totalMessages.value = res.total
+      totalPages.value = res.total_pages
+    }
+  } catch {
+    // silent
+  }
+}
+
+// ── Store ─────────────────────────────────────────────────────────────────
 export function useMailStore() {
   const selectedAccount = computed(() =>
     accounts.value.find(a => a.id === selectedAccountId.value) || null
   )
 
-  // The display name for the selected folder (strips [Gmail]/ prefix etc.)
   const selectedFolderDisplayName = computed(() => {
     const f = folders.value.find(f => f.full_name === selectedFolderName.value)
     return f ? f.name : selectedFolderName.value
@@ -68,7 +110,6 @@ export function useMailStore() {
     try {
       accounts.value = await api.getAccounts()
       if (accounts.value.length > 0 && !selectedAccountId.value) {
-        // Restore last used account, fallback to first
         const { accountId } = loadLastSession()
         const restored = accountId && accounts.value.find(a => a.id === accountId)
         selectedAccountId.value = restored ? restored.id : accounts.value[0].id
@@ -111,18 +152,21 @@ export function useMailStore() {
     }
   }
 
-  async function loadMessages(acc: Account, folder: string) {
+  async function loadMessages(acc: Account, folder: string, page = 1) {
     selectedFolderName.value = folder
     selectedMessage.value = null
     messages.value = []
     selectedMessages.value.clear()
+    currentPage.value = page
     messagesLoading.value = true
     error.value = ''
-    // Persist last session
     saveLastSession(acc.id, folder)
     try {
-      const res = await api.getMessages(acc, folder, 100)
+      const res = await api.getMessages(acc, folder, pageSize.value, page)
       messages.value = res.messages || []
+      totalMessages.value = res.total
+      totalPages.value = res.total_pages
+      currentPage.value = res.page
     } catch (e: any) {
       error.value = e.message || 'Failed to load'
     } finally {
@@ -130,13 +174,13 @@ export function useMailStore() {
     }
   }
 
-  // Prefetch a message into cache without showing it
+  // Prefetch a message into cache without displaying it
   function prefetchMessage(acc: Account, uid: number) {
     const folder = selectedFolderName.value
-    if (cacheGet(acc.id, folder, uid)) return   // already cached
+    if (cacheGet(acc.id, folder, uid)) return
     api.getMessage(acc, folder, uid)
       .then(msg => cacheSet(acc.id, folder, uid, msg))
-      .catch(() => {})   // silent — it's just a hint
+      .catch(() => {})
   }
 
   async function openMessage(acc: Account, uid: number) {
@@ -145,10 +189,7 @@ export function useMailStore() {
       const cached = cacheGet(acc.id, folder, uid)
 
       if (cached) {
-        // Show instantly from cache
         selectedMessage.value = cached
-
-        // If unread — mark read in background, update cache + list
         if (!cached.is_read) {
           api.markRead(acc, folder, uid).then(() => {
             const updated = { ...cached, is_read: true }
@@ -161,7 +202,6 @@ export function useMailStore() {
         return
       }
 
-      // Not cached — fetch, but show loading state only if no previous message visible
       const msg = await api.getMessage(acc, folder, uid)
       cacheSet(acc.id, folder, uid, msg)
       selectedMessage.value = msg
@@ -254,6 +294,10 @@ export function useMailStore() {
     sortBy,
     sortAsc,
     quota,
+    currentPage,
+    totalPages,
+    totalMessages,
+    pageSize,
     loadAccounts,
     selectAccount,
     selectFolder,
@@ -262,6 +306,8 @@ export function useMailStore() {
     openMessage,
     closeMessage,
     prefetchMessage,
+    startAutoRefresh,
+    stopAutoRefresh,
     markMessageUnread,
     deleteMessage,
     toggleMessageSelect,

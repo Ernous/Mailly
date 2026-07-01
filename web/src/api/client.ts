@@ -85,9 +85,9 @@ export const api = {
   getFolders: (acc: Account) =>
     request<Folder[]>('/folders', { headers: accountHeaders(acc) }),
 
-  getMessages: (acc: Account, folder: string, limit = 50) =>
-    request<{ messages: Message[]; total: number }>(
-      `/messages?folder=${encodeURIComponent(folder)}&limit=${limit}`,
+  getMessages: (acc: Account, folder: string, limit = 50, page = 1) =>
+    request<{ messages: Message[]; total: number; page: number; limit: number; total_pages: number }>(
+      `/messages?folder=${encodeURIComponent(folder)}&limit=${limit}&page=${page}`,
       { headers: accountHeaders(acc) }
     ),
 

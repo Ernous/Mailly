@@ -1,9 +1,38 @@
 import { createApp } from 'vue'
 import { createVuetify } from 'vuetify'
 import 'vuetify/styles'
-import '@mdi/font/css/materialdesignicons.css'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
+
+// Only import components actually used in the app
+import {
+  VApp,
+  VBtn,
+  VIcon,
+  VAvatar,
+  VImg,
+  VCard,
+  VCardText,
+  VCardActions,
+  VDialog,
+  VDivider,
+  VList,
+  VListItem,
+  VListItemTitle,
+  VMenu,
+  VProgressCircular,
+  VProgressLinear,
+  VSelect,
+  VSpacer,
+  VTextarea,
+  VTextField,
+  VExpandTransition,
+  VAlert,
+} from 'vuetify/components'
+
+import {
+  Ripple,
+} from 'vuetify/directives'
+
+
 import App from './App.vue'
 import router from './router'
 
@@ -28,8 +57,31 @@ const theme = {
 }
 
 const vuetify = createVuetify({
-  components,
-  directives,
+  components: {
+    VApp,
+    VBtn,
+    VIcon,
+    VAvatar,
+    VImg,
+    VCard,
+    VCardText,
+    VCardActions,
+    VDialog,
+    VDivider,
+    VList,
+    VListItem,
+    VListItemTitle,
+    VMenu,
+    VProgressCircular,
+    VProgressLinear,
+    VSelect,
+    VSpacer,
+    VTextarea,
+    VTextField,
+    VExpandTransition,
+    VAlert,
+  },
+  directives: { Ripple },
   theme: {
     defaultTheme: 'theme',
     themes: { theme },

@@ -219,18 +219,10 @@
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: #444 transparent;
 }
-.message-view .msg-body::-webkit-scrollbar {
-  width: 6px;
-}
-.message-view .msg-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-.message-view .msg-body::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 3px;
+
+.message-view .iframe-scaler {
+  width: 100%;
 }
 
 .message-view .msg-iframe {

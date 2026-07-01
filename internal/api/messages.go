@@ -106,6 +106,10 @@ func (h *MessageHandler) ListByFolder(w http.ResponseWriter, r *http.Request) {
 	if limit == 0 {
 		limit = 50
 	}
+	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+	if page < 1 {
+		page = 1
+	}
 
 	c, err := connectIMAP(creds)
 	if err != nil {
@@ -126,14 +130,22 @@ func (h *MessageHandler) ListByFolder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	from := uint32(1)
-	to := uint32(total)
-	if limit > 0 && limit < total {
-		from = uint32(total - limit + 1)
+	// Page-based range: newest messages first (IMAP seq nums are oldest=1)
+	// page=1 → last `limit` messages, page=2 → previous `limit`, etc.
+	totalPages := (total + limit - 1) / limit
+	if page > totalPages {
+		page = totalPages
+	}
+
+	// Calculate sequence range (messages are 1-indexed, newest = highest seq)
+	seqTo := total - (page-1)*limit
+	seqFrom := seqTo - limit + 1
+	if seqFrom < 1 {
+		seqFrom = 1
 	}
 
 	seqset := new(imap.SeqSet)
-	seqset.AddRange(from, to)
+	seqset.AddRange(uint32(seqFrom), uint32(seqTo))
 
 	messages := make(chan *imap.Message, 100)
 	done := make(chan error, 1)
@@ -186,8 +198,11 @@ func (h *MessageHandler) ListByFolder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jsonOK(w, map[string]interface{}{
-		"messages": resp,
-		"total":    total,
+		"messages":    resp,
+		"total":       total,
+		"page":        page,
+		"limit":       limit,
+		"total_pages": (total + limit - 1) / limit,
 	})
 }
 

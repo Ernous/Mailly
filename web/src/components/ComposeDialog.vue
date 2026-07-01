@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
+import { ref, watch, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue'
 import type { Account } from '../api/client'
-import RichEditor from './RichEditor.vue'
 import './ComposeDialog.css'
+
+// Lazy-load RichEditor — pulls in all of Tiptap only when dialog opens
+const RichEditor = defineAsyncComponent(() => import('./RichEditor.vue'))
 
 // Fullscreen on mobile
 const windowWidth = ref(window.innerWidth)

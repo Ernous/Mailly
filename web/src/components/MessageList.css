@@ -4,6 +4,7 @@
   height: 100%;
   background: #1e1e1e;
   border-right: 1px solid #333;
+  overflow: hidden;
 }
 
 .list-header {
@@ -26,7 +27,15 @@
   border-bottom: 1px solid #333;
 }
 
+.list-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .empty-state {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -36,12 +45,8 @@
 
 .message-items {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.message-items::-webkit-scrollbar {
-  display: none;
 }
 
 .message-item {
@@ -134,4 +139,65 @@
 .message-unread .msg-subject {
   color: #ccc;
   font-weight: 600;
+}
+
+/* ── Pagination bar ── */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-top: 1px solid #2a2a2a;
+  background: #1a1a1a;
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.page-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #888;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.page-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.07);
+  color: #e0e0e0;
+}
+.page-btn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.page-info {
+  font-size: 12px;
+  color: #777;
+  min-width: 52px;
+  text-align: center;
+  user-select: none;
+}
+
+@media (max-width: 767px) {
+  .pagination-bar {
+    padding: 10px 16px;
+    gap: 8px;
+  }
+
+  .page-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .page-info {
+    font-size: 14px;
+    min-width: 64px;
+  }
 }

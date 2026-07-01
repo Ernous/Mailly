@@ -1,34 +1,88 @@
 # Mailly
 
-A lightweight email client built with Go and Vue.js.
+A lightweight self-hosted email client built with Go and Vue.js.
 
 ## Getting Started
 
 ### Using Docker (Recommended)
-1. Provide your OAuth credentials in the `docker-compose.yml` file.
-2. Run the application:
+
 ```bash
 docker-compose up -d
 ```
-The application will be available at `http://localhost:3000`.
+
+Available at `http://localhost:3000`.
+
+---
 
 ### Manual Build
-To build the application manually into a single executable, use the provided build script. You'll need `go` and `bun` installed.
 
-**Windows:**
+You need: **Go 1.21+**, **Bun**
+
+#### Linux / macOS
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+Then run:
+```bash
+./mailly
+```
+
+#### Windows
+
 ```bat
 build.bat
 ```
 
-This will:
-1. Build the frontend (Vue) and copy it to the Go server directory.
-2. Embed the frontend inside the Go binary.
-3. Output a single `mailly.exe` binary.
-
-**Configuration:**
-Create a `.env` file based on `.env.example` and fill in your OAuth credentials (Google/Microsoft) and other settings.
-
-Run the binary:
+Then run:
 ```bat
 mailly.exe
 ```
+
+#### Step by step (without scripts)
+
+```bash
+# 1. Build frontend
+cd web
+bun install
+bun run build
+cd ..
+
+# 2. Copy dist to Go embed directory
+rm -rf cmd/server/dist
+cp -r web/dist cmd/server/dist
+
+# 3. Build Go binary
+go build -o mailly ./cmd/server   # Linux/macOS
+go build -o mailly.exe ./cmd/server  # Windows
+```
+
+#### Cross-compile for Linux from any OS
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o mailly-linux ./cmd/server
+```
+
+#### Cross-compile for Windows from Linux/macOS
+
+```bash
+GOOS=windows GOARCH=amd64 go build -o mailly.exe ./cmd/server
+```
+
+---
+
+### Configuration
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Key variables:
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — for Gmail OAuth
+- `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` — for Outlook OAuth
+- `SESSION_SECRET` — random secret for session encryption
+- `PORT` — server port (default: 3000)

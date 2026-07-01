@@ -67,7 +67,10 @@
 .shell-dialog-open .mail-view-col :deep(.message-view) {
   overflow: hidden;
 }
-   Sidebar collapses to icon rail (handled by JS),
+
+/* ══════════════════════════════════════════════════
+   TABLET  768px - 1024px
+   Sidebar collapses to icon rail via JS,
    message list gets a bit narrower
 ══════════════════════════════════════════════════ */
 @media (max-width: 1024px) and (min-width: 768px) {
@@ -98,6 +101,8 @@
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1),
                 opacity 0.28s ease;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Default positions */
@@ -180,7 +185,10 @@
   }
 
   .mail-list-col :deep(.message-list) {
-    height: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .sidebar-col :deep(.account-menu) {
