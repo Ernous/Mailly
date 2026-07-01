@@ -37,7 +37,7 @@ html, body {
   overflow: hidden !important;
   background: #121212;
   height: 100%;
-  max-height: 100vh;
+  max-height: 100dvh;
 }
 
 /* ── Minimal scrollbar ── */

@@ -3,16 +3,17 @@
   align-items: center;
   justify-content: center;
   height: 100vh;
+  height: 100dvh;
   background: #121212;
 }
 
 .mail-shell {
   display: flex;
   height: 100vh;
+  height: 100dvh; /* dynamic viewport — accounts for mobile browser chrome */
   width: 100%;
   overflow: hidden;
   background: #121212;
-  /* Prevent any scroll bleed-through when a dialog is open */
   position: fixed;
   top: 0;
   left: 0;

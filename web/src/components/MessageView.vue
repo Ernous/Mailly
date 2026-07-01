@@ -20,15 +20,14 @@ const emit = defineEmits<{
 
 const showMoreMenu = ref(false)
 const iframeRef = ref<HTMLIFrameElement | null>(null)
-const scalerRef = ref<HTMLDivElement | null>(null)
 const msgBodyRef = ref<HTMLDivElement | null>(null)
 
-// Reset iframe sizing when message changes
+// Reset iframe height when message changes
 watch(() => props.message?.uid, () => {
   iframeContentObserver?.disconnect()
   iframeContentObserver = null
   if (iframeRef.value) {
-    iframeRef.value.style.height = '200px'
+    iframeRef.value.style.height = '400px'
   }
 })
 
@@ -98,19 +97,19 @@ function recalcScale() {
 }
 
 let recalcRaf = 0
+let iframeContentObserver: ResizeObserver | null = null
+
 function scheduleRecalc() {
   cancelAnimationFrame(recalcRaf)
   recalcRaf = requestAnimationFrame(recalcScale)
 }
 
-// Observes the iframe's own document body so that height/width changes
-// happening *after* the load event (images finishing, web fonts swapping
-// in, lazy content) automatically trigger a re-measure instead of relying
-// on guessed timeouts.
-let iframeContentObserver: ResizeObserver | null = null
-
 function onIframeLoad() {
+  // Immediate recalc
   scheduleRecalc()
+  // Re-measure after images/fonts load (mobile browsers are slower)
+  setTimeout(scheduleRecalc, 300)
+  setTimeout(scheduleRecalc, 1000)
 
   iframeContentObserver?.disconnect()
   iframeContentObserver = null
@@ -239,16 +238,15 @@ onUnmounted(() => {
       </div>
 
       <div class="msg-body" ref="msgBodyRef">
-        <div v-if="message.html_body" class="iframe-scaler" ref="scalerRef">
-          <iframe
-            ref="iframeRef"
-            :srcdoc="iframeSrcdoc"
-            class="msg-iframe"
-            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            frameborder="0"
-            @load="onIframeLoad"
-          />
-        </div>
+        <iframe
+          v-if="message.html_body"
+          ref="iframeRef"
+          :srcdoc="iframeSrcdoc"
+          class="msg-iframe"
+          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          frameborder="0"
+          @load="onIframeLoad"
+        />
         <div v-else class="msg-text">{{ message.text_body }}</div>
       </div>
     </template>
