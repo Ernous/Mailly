@@ -185,14 +185,29 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Mailly</title></head><body>
 <script>
-try {
-  if (window.opener) {
-    window.opener.postMessage({type: "mailly:connected", account_id: %q, email: %q, provider: %q}, "*");
+(function() {
+  var accountId = %q;
+  var email = %q;
+  var provider = %q;
+  function done() {
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          {type: "mailly:connected", account_id: accountId, email: email, provider: provider},
+          window.location.origin
+        );
+      }
+    } catch(e) {
+      console.error("postMessage failed:", e);
+    }
+    setTimeout(function() { window.close(); }, 300);
   }
-} catch(e) {}
-setTimeout(function() { window.close(); }, 500);
+  // Small delay to ensure cookie is set
+  setTimeout(done, 200);
+})();
 </script>
-<h2>Connected: %s</h2><p>This window will close automatically.</p>
+<h2 style="font-family:sans-serif;color:#4d8080">&#10003; Connected: %s</h2>
+<p style="font-family:sans-serif;color:#999">This window will close automatically.</p>
 </body></html>`, account.ID.String(), userInfo.Email, entry.Provider, userInfo.Email)
 }
 

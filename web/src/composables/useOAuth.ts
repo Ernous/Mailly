@@ -12,7 +12,7 @@ export function useOAuth() {
     error.value = ''
     try {
       const res = await api.connect(provider)
-      const popup = window.open(res.redirect_url, '_blank', 'width=600,height=700')
+      const popup = window.open(res.redirect_url, 'mailly_oauth', 'width=600,height=700,noopener=no')
 
       const handler = (e: MessageEvent) => {
         if (e.data?.type === 'mailly:connected') {
