@@ -12,11 +12,12 @@ export function useOAuth() {
     error.value = ''
     try {
       const res = await api.connect(provider)
-      const popup = window.open(res.redirect_url, 'mailly_oauth', 'width=600,height=700,noopener=no')
+      const popup = window.open(res.redirect_url, 'mailly_oauth', 'width=600,height=700')
 
       const handler = (e: MessageEvent) => {
         if (e.data?.type === 'mailly:connected') {
           window.removeEventListener('message', handler)
+          clearInterval(poll)
           popup?.close()
           connecting.value = false
           if (e.data.account_id) {
@@ -24,6 +25,13 @@ export function useOAuth() {
           } else {
             router.push('/mail')
           }
+        }
+        if (e.data?.type === 'mailly:error') {
+          window.removeEventListener('message', handler)
+          clearInterval(poll)
+          popup?.close()
+          connecting.value = false
+          error.value = e.data.error || 'Authorization failed'
         }
       }
       window.addEventListener('message', handler)

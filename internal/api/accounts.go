@@ -78,14 +78,14 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	if code == "" || state == "" {
 		log.Printf("[API] GET /api/accounts/callback - missing code or state")
-		jsonError(w, "missing code or state", http.StatusBadRequest)
+		callbackError(w, "Missing authorization code or state. Please try again.")
 		return
 	}
 
 	entry, err := h.stateStore.Get(state)
 	if err != nil {
 		log.Printf("[API] GET /api/accounts/callback - invalid state: %v", err)
-		jsonError(w, "invalid state: "+err.Error(), http.StatusBadRequest)
+		callbackError(w, "Session expired or invalid. Please try connecting again.")
 		return
 	}
 
@@ -94,7 +94,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	token, err := oauth.ExchangeCode(r.Context(), entry.Provider, code)
 	if err != nil {
 		log.Printf("[API] GET /api/accounts/callback - token exchange failed: %v", err)
-		jsonError(w, "failed to exchange code: "+err.Error(), http.StatusInternalServerError)
+		callbackError(w, "Authorization failed: the code expired or was already used. Please try connecting again.")
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	userInfo, err := oauth.GetUserInfo(r.Context(), entry.Provider, token.AccessToken)
 	if err != nil {
 		log.Printf("[API] GET /api/accounts/callback - get user info failed: %v", err)
-		jsonError(w, "failed to get user info: "+err.Error(), http.StatusInternalServerError)
+		callbackError(w, "Failed to fetch account information. Please try again.")
 		return
 	}
 
@@ -125,7 +125,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		user, err := h.storage.GetOrCreateUser(r.Context(), userInfo.Email)
 		if err != nil {
 			log.Printf("[API] GET /api/accounts/callback - get or create user failed: %v", err)
-			jsonError(w, "failed to create user", http.StatusInternalServerError)
+			callbackError(w, "Failed to create user account. Please try again.")
 			return
 		}
 		userID = user.ID
@@ -133,7 +133,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		sessionID, err = h.storage.CreateSession(r.Context(), userID)
 		if err != nil {
 			log.Printf("[API] GET /api/accounts/callback - create session failed: %v", err)
-			jsonError(w, "failed to create session", http.StatusInternalServerError)
+			callbackError(w, "Failed to create session. Please try again.")
 			return
 		}
 		log.Printf("[API] GET /api/accounts/callback - new session created: %s", sessionID[:8]+"...")
@@ -165,7 +165,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	if err := h.storage.CreateAccount(r.Context(), account); err != nil {
 		log.Printf("[API] GET /api/accounts/callback - create account failed: %v", err)
-		jsonError(w, "failed to save account", http.StatusInternalServerError)
+		callbackError(w, "Failed to save account. Please try again.")
 		return
 	}
 
@@ -181,34 +181,7 @@ func (h *AccountHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   86400,
 	})
 
-	// Return HTML that posts message to opener and closes
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Mailly</title></head><body>
-<script>
-(function() {
-  var accountId = %q;
-  var email = %q;
-  var provider = %q;
-  function done() {
-    try {
-      if (window.opener && !window.opener.closed) {
-        window.opener.postMessage(
-          {type: "mailly:connected", account_id: accountId, email: email, provider: provider},
-          window.location.origin
-        );
-      }
-    } catch(e) {
-      console.error("postMessage failed:", e);
-    }
-    setTimeout(function() { window.close(); }, 300);
-  }
-  // Small delay to ensure cookie is set
-  setTimeout(done, 200);
-})();
-</script>
-<h2 style="font-family:sans-serif;color:#4d8080">&#10003; Connected: %s</h2>
-<p style="font-family:sans-serif;color:#999">This window will close automatically.</p>
-</body></html>`, account.ID.String(), userInfo.Email, entry.Provider, userInfo.Email)
+	callbackSuccess(w, account.ID.String(), userInfo.Email, string(entry.Provider), userInfo.Email)
 }
 
 func (h *AccountHandler) ConnectCustom(w http.ResponseWriter, r *http.Request) {
@@ -448,6 +421,60 @@ func (h *AccountHandler) Quota(w http.ResponseWriter, r *http.Request) {
 		"used":  used,
 		"total": total,
 	})
+}
+
+func callbackError(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusBadRequest)
+	fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Mailly Error</title></head><body>
+<script>
+(function() {
+  try {
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        {type: "mailly:error", error: %q},
+        window.location.origin
+      );
+    }
+  } catch(e) {
+    console.error("postMessage failed:", e);
+  }
+  setTimeout(function() { window.close(); }, 300);
+})();
+</script>
+<h2 style="font-family:sans-serif;color:#b33">&#10007; Connection failed</h2>
+<p style="font-family:sans-serif;color:#666">%s</p>
+<p style="font-family:sans-serif;color:#999">This window will close automatically.</p>
+</body></html>`, message, message)
+}
+
+func callbackSuccess(w http.ResponseWriter, accountID, email, provider, displayEmail string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<!DOCTYPE html><html><head><title>Mailly</title></head><body>
+<script>
+(function() {
+  var accountId = %q;
+  var email = %q;
+  var provider = %q;
+  function done() {
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          {type: "mailly:connected", account_id: accountId, email: email, provider: provider},
+          window.location.origin
+        );
+      }
+    } catch(e) {
+      console.error("postMessage failed:", e);
+    }
+    setTimeout(function() { window.close(); }, 300);
+  }
+  setTimeout(done, 200);
+})();
+</script>
+<h2 style="font-family:sans-serif;color:#4d8080">&#10003; Connected: %s</h2>
+<p style="font-family:sans-serif;color:#999">This window will close automatically.</p>
+</body></html>`, accountID, email, provider, displayEmail)
 }
 
 func safeCode(code string) string {

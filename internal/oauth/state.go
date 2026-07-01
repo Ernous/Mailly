@@ -38,7 +38,7 @@ func (s *StateStore) Get(state string) (*StateEntry, error) {
 	if !ok {
 		return nil, fmt.Errorf("invalid or expired state")
 	}
-	if time.Since(entry.CreatedAt) > 10*time.Minute {
+	if time.Since(entry.CreatedAt) > 5*time.Minute {
 		delete(s.states, state)
 		return nil, fmt.Errorf("state expired")
 	}
@@ -52,7 +52,7 @@ func (s *StateStore) cleanup() {
 	for range ticker.C {
 		now := time.Now()
 		for k, v := range s.states {
-			if now.Sub(v.CreatedAt) > 10*time.Minute {
+			if now.Sub(v.CreatedAt) > 5*time.Minute {
 				delete(s.states, k)
 			}
 		}
