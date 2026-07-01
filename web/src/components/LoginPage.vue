@@ -7,7 +7,7 @@ import type { Account } from '../api/client'
 import './LoginPage.css'
 
 const router = useRouter()
-const { connecting, connect } = useOAuth()
+const { connecting, error: oauthError, connect } = useOAuth()
 const existingAccounts = ref<Account[]>([])
 
 const showCustomForm = ref(false)
@@ -130,6 +130,16 @@ async function connectCustom() {
           </v-btn>
 
           <v-progress-linear v-if="connecting" indeterminate color="primary" class="mt-4" />
+
+          <v-alert
+            v-if="oauthError"
+            type="error"
+            density="compact"
+            variant="tonal"
+            class="mt-3 text-caption"
+          >
+            {{ oauthError }}
+          </v-alert>
         </div>
       </div>
 

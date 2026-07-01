@@ -5,9 +5,11 @@ import { api } from '../api/client'
 export function useOAuth() {
   const router = useRouter()
   const connecting = ref(false)
+  const error = ref('')
 
   async function connect(provider: string) {
     connecting.value = true
+    error.value = ''
     try {
       const res = await api.connect(provider)
       const popup = window.open(res.redirect_url, '_blank', 'width=600,height=700')
@@ -26,18 +28,32 @@ export function useOAuth() {
       }
       window.addEventListener('message', handler)
 
-      const poll = setInterval(() => {
+      const poll = setInterval(async () => {
         if (!popup || popup.closed) {
           clearInterval(poll)
           window.removeEventListener('message', handler)
           connecting.value = false
-          router.push('/mail')
+
+          // Popup closed — check if auth actually succeeded by fetching accounts
+          try {
+            const accounts = await api.getAccounts()
+            if (accounts && accounts.length > 0) {
+              // Auth succeeded (popup closed after postMessage or user closed after grant)
+              router.push(`/mail/${accounts[0].id}/INBOX`)
+            } else {
+              // Popup closed without completing auth
+              error.value = 'Authorization cancelled'
+            }
+          } catch {
+            error.value = 'Authorization cancelled'
+          }
         }
-      }, 1000)
+      }, 500)
     } catch {
       connecting.value = false
+      error.value = 'Failed to start OAuth flow'
     }
   }
 
-  return { connecting, connect }
+  return { connecting, error, connect }
 }
