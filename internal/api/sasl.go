@@ -30,8 +30,10 @@ func (c *SASLClient) Start() (mech string, ir []byte, err error) {
 }
 
 func (c *SASLClient) Next(challenge []byte) ([]byte, error) {
+	// For OAUTHBEARER: if server sends an error JSON in the challenge,
+	// respond with empty string to abort gracefully (RFC 7628 §3.2.3)
 	if c.mechanism == "OAUTHBEARER" {
-		return []byte(fmt.Sprintf("n,user=%s,\x01auth=Bearer %s\x01\x01", c.username, c.accessToken)), nil
+		return []byte(""), nil
 	}
 	return []byte(fmt.Sprintf("user=%s\x01auth=Bearer %s\x01\x01", c.username, c.accessToken)), nil
 }

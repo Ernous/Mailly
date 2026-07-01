@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,13 +69,14 @@ func RegisterMicrosoft(clientID, clientSecret, redirectURI string) {
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize",
-				TokenURL: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
+				AuthURL:  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+				TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 			},
 			Scopes: []string{
 				"User.Read",
-				"IMAP.AccessAsUser.All",
-				"SMTP.Send",
+				// Full IMAP scope URLs required for personal + work accounts
+				"https://outlook.office.com/IMAP.AccessAsUser.All",
+				"https://outlook.office.com/SMTP.Send",
 				"offline_access",
 				"openid",
 				"email",
@@ -126,17 +128,89 @@ type UserInfo struct {
 }
 
 func GetUserInfo(ctx context.Context, provider Provider, accessToken string) (*UserInfo, error) {
-	var url string
 	switch provider {
 	case ProviderGoogle:
-		url = "https://www.googleapis.com/oauth2/v2/userinfo"
+		return getGoogleUserInfo(ctx, accessToken)
 	case ProviderMicrosoft:
-		url = "https://graph.microsoft.com/v1.0/me"
+		return getMicrosoftUserInfo(ctx, accessToken)
 	default:
 		return nil, fmt.Errorf("unknown provider: %s", provider)
 	}
+}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+func getGoogleUserInfo(ctx context.Context, accessToken string) (*UserInfo, error) {
+	raw, err := fetchJSON(ctx, "https://www.googleapis.com/oauth2/v2/userinfo", accessToken)
+	if err != nil {
+		return nil, err
+	}
+	info := &UserInfo{}
+	info.Email, _ = raw["email"].(string)
+	info.Name, _ = raw["name"].(string)
+	info.PhotoURL, _ = raw["picture"].(string)
+	return info, nil
+}
+
+func getMicrosoftUserInfo(ctx context.Context, accessToken string) (*UserInfo, error) {
+	raw, err := fetchJSON(ctx, "https://graph.microsoft.com/v1.0/me", accessToken)
+	if err != nil {
+		return nil, err
+	}
+	info := &UserInfo{}
+
+	// Email: try mail, then userPrincipalName (personal accounts often have only UPN)
+	if mail, ok := raw["mail"].(string); ok && mail != "" {
+		info.Email = mail
+	} else if upn, ok := raw["userPrincipalName"].(string); ok {
+		info.Email = upn
+	}
+
+	// Display name
+	if name, ok := raw["displayName"].(string); ok {
+		info.Name = name
+	}
+
+	// Avatar — separate endpoint, failure is non-fatal
+	photoURL, err := getMicrosoftPhoto(ctx, accessToken)
+	if err == nil {
+		info.PhotoURL = photoURL
+	}
+
+	return info, nil
+}
+
+// getMicrosoftPhoto fetches the user's profile photo as a data URI.
+func getMicrosoftPhoto(ctx context.Context, accessToken string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://graph.microsoft.com/v1.0/me/photo/$value", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", fmt.Errorf("photo not available: %d", resp.StatusCode)
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "image/jpeg"
+	}
+
+	return fmt.Sprintf("data:%s;base64,%s", contentType,
+		fmt.Sprintf("%s", encodeBase64(data))), nil
+}
+
+func fetchJSON(ctx context.Context, url, accessToken string) (map[string]interface{}, error) {	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -150,31 +224,16 @@ func GetUserInfo(ctx context.Context, provider Provider, accessToken string) (*U
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("userinfo request failed (%d): %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("request failed (%d): %s", resp.StatusCode, string(body))
 	}
 
 	var raw map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
 		return nil, err
 	}
+	return raw, nil
+}
 
-	info := &UserInfo{}
-
-	if email, ok := raw["email"].(string); ok {
-		info.Email = email
-	} else if emails, ok := raw["mail"].(string); ok {
-		info.Email = emails
-	}
-
-	if name, ok := raw["name"].(string); ok {
-		info.Name = name
-	} else if display, ok := raw["displayName"].(string); ok {
-		info.Name = display
-	}
-
-	if picture, ok := raw["picture"].(string); ok {
-		info.PhotoURL = picture
-	}
-
-	return info, nil
+func encodeBase64(data []byte) string {
+	return base64.StdEncoding.EncodeToString(data)
 }
