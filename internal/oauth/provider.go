@@ -69,8 +69,8 @@ func RegisterMicrosoft(clientID, clientSecret, redirectURI string) {
 			ClientID:     clientID,
 			ClientSecret: clientSecret,
 			Endpoint: oauth2.Endpoint{
-				AuthURL:  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-				TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+				AuthURL:  "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize",
+				TokenURL: "https://login.microsoftonline.com/consumers/oauth2/v2.0/token",
 			},
 			Scopes: []string{
 				"User.Read",
