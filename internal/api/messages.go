@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -196,6 +197,13 @@ func (h *MessageHandler) ListByFolder(w http.ResponseWriter, r *http.Request) {
 	if resp == nil {
 		resp = []map[string]interface{}{}
 	}
+
+	// Sort by date descending (newest first) — IMAP order is not guaranteed
+	sort.Slice(resp, func(i, j int) bool {
+		di, _ := resp[i]["date"].(time.Time)
+		dj, _ := resp[j]["date"].(time.Time)
+		return di.After(dj)
+	})
 
 	jsonOK(w, map[string]interface{}{
 		"messages":    resp,
